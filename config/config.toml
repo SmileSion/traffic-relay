@@ -1,0 +1,21 @@
+[log]
+filepath = "log/relay.log"
+max_size = 10
+max_backups = 3
+max_age = 7
+compress = true
+
+[relay]
+listen_addr = "127.0.0.1:9100"
+
+[[routes]]
+listen_path = "/ratelimit/check"
+backend_url = "http://127.0.0.1:9013"
+
+[[routes]]
+listen_path = "/ratelimit/open"
+backend_url = "http://127.0.0.1:9013"
+
+[[routes]]
+listen_path = "/ratelimit/close"
+backend_url = "http://127.0.0.1:9013"

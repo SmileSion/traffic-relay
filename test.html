@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>跨域测试</title>
+</head>
+<body>
+  <button id="btn">发送请求</button>
+  <pre id="result"></pre>
+
+  <script>
+    document.getElementById("btn").onclick = function() {
+      fetch("http://www.smilesion.icu:7002/ratelimit/check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "secretKey":"148f0da36013c729a4fa085ffbd0d3bc428d5cbc3f5273911231f9a8575698f8"
+        },
+        body: JSON.stringify({ uid: 123 })
+      })
+      .then(res => res.text())
+      .then(text => {
+        document.getElementById("result").innerText = text;
+      })
+      .catch(err => {
+        document.getElementById("result").innerText = "错误: " + err.message;
+      });
+    }
+  </script>
+</body>
+</html>
