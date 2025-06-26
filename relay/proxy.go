@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +27,13 @@ func dumpRequest(r *http.Request) string {
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 	return b.String()
+}
+
+// 定义一个跳过证书验证的 HTTP 客户端
+var insecureHttpClient = &http.Client{
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	},
 }
 
 // MakeProxyHandler 返回一个代理函数，将请求转发至 backendURL，并根据配置覆盖 method
@@ -58,14 +66,12 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 
 		// 处理请求体
 		var body io.Reader
-		var queryStr string
-
 		if method == http.MethodGet {
 			// POST → GET：将 Body 转为 query string 附在 URL 后
 			if r.Body != nil {
 				bodyBytes, _ := io.ReadAll(r.Body)
-				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // 重设
-				queryStr = string(bodyBytes)
+				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // 重设 Body
+				queryStr := string(bodyBytes)
 				targetURL += "?" + url.QueryEscape(queryStr)
 			}
 			body = nil
@@ -86,8 +92,8 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		// 日志：转发请求
 		logger.Logger.Printf("转发请求到：%s\n%s", targetURL, dumpRequest(req))
 
-		// 执行转发
-		resp, err := http.DefaultClient.Do(req)
+		// 执行转发（使用跳过证书验证的客户端）
+		resp, err := insecureHttpClient.Do(req)
 		if err != nil {
 			http.Error(w, "请求后端失败", http.StatusBadGateway)
 			logger.Logger.Printf("请求后端失败: %v", err)
@@ -95,7 +101,7 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		}
 		defer resp.Body.Close()
 
-		// 响应头和响应体
+		// 拷贝响应头和响应体
 		for k, v := range resp.Header {
 			w.Header()[k] = v
 		}
