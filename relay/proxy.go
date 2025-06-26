@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"traffic-relay/config"
 	"traffic-relay/logger"
@@ -28,15 +29,39 @@ func dumpRequest(r *http.Request) string {
 	return b.String()
 }
 
-// 定义一个跳过证书验证的 HTTP 客户端
+// insecureHttpClient 是跳过证书验证的客户端
 var insecureHttpClient = &http.Client{
 	Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	},
 }
 
-// MakeProxyHandler 返回一个代理函数，将请求转发至 backendURL，并根据配置覆盖 method
+// RoundRobinBalancer 轮询负载均衡器
+type RoundRobinBalancer struct {
+	counter uint64
+	targets []string
+}
+
+func NewRoundRobinBalancer(targets []string) *RoundRobinBalancer {
+	return &RoundRobinBalancer{targets: targets}
+}
+
+func (rr *RoundRobinBalancer) Next() string {
+	if len(rr.targets) == 0 {
+		return ""
+	}
+	idx := atomic.AddUint64(&rr.counter, 1)
+	return rr.targets[int(idx-1)%len(rr.targets)]
+}
+
+// MakeProxyHandler 返回一个代理处理函数，支持多个后端地址轮询转发和方法重写
 func MakeProxyHandler(route config.Route) http.HandlerFunc {
+	targets := route.BackendURLs
+	if len(targets) == 0 && route.BackendURL != "" {
+		targets = []string{route.BackendURL}
+	}
+	balancer := NewRoundRobinBalancer(targets)
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 处理 OPTIONS 预检请求
 		if r.Method == http.MethodOptions {
@@ -47,37 +72,34 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 			return
 		}
 
-		// 设置跨域响应头
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		// 日志记录：接收请求
 		logger.Logger.Printf("收到请求：\n%s", dumpRequest(r))
 
-		// 判断是否需要 method 重写
 		method := r.Method
 		if route.MethodOverride != "" && strings.ToUpper(route.MethodOverride) != r.Method {
-			logger.Logger.Printf("方法重写: %s => %s", r.Method, route.MethodOverride)
 			method = strings.ToUpper(route.MethodOverride)
+			logger.Logger.Printf("方法重写: %s => %s", r.Method, method)
 		}
 
-		// 目标 URL
-		targetURL := strings.TrimRight(route.BackendURL, "/") + r.URL.Path
+		targetBackend := balancer.Next()
+		if targetBackend == "" {
+			http.Error(w, "无可用后端地址", http.StatusServiceUnavailable)
+			return
+		}
 
-		// 如果原请求有查询参数，附加上去
+		targetURL := strings.TrimRight(targetBackend, "/") + r.URL.Path
 		if r.URL.RawQuery != "" {
 			targetURL += "?" + r.URL.RawQuery
 		}
 
 		var body io.Reader
 		if method == http.MethodGet {
-			// GET 请求一般没有 Body，直接置空
 			body = nil
 		} else {
-			// 其他方法保持 Body
 			body = r.Body
 		}
 
-		// 构造转发请求
 		req, err := http.NewRequest(method, targetURL, body)
 		if err != nil {
 			http.Error(w, "构造请求失败", http.StatusInternalServerError)
@@ -86,10 +108,8 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		}
 		req.Header = r.Header.Clone()
 
-		// 日志：转发请求
 		logger.Logger.Printf("转发请求到：%s\n%s", targetURL, dumpRequest(req))
 
-		// 执行转发（使用跳过证书验证的客户端）
 		resp, err := insecureHttpClient.Do(req)
 		if err != nil {
 			http.Error(w, "请求后端失败", http.StatusBadGateway)
@@ -98,7 +118,6 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		}
 		defer resp.Body.Close()
 
-		// 拷贝响应头和响应体
 		for k, v := range resp.Header {
 			w.Header()[k] = v
 		}

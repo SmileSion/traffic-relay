@@ -10,8 +10,8 @@ listen_addr = "127.0.0.1:9100"
 
 [[routes]]
 listen_path = "/ratelimit/check"
-backend_url = "http://127.0.0.1:9013"
-method_override = "GET"
+backend_urls = ["http://127.0.0.1:9013", "http://127.0.0.1:9014"]  # 多个后端地址，支持轮询
+method_override = "POST"
 
 [[routes]]
 listen_path = "/ratelimit/open"
