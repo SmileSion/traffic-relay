@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"traffic-relay/config"
@@ -64,19 +63,17 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		// 目标 URL
 		targetURL := strings.TrimRight(route.BackendURL, "/") + r.URL.Path
 
-		// 处理请求体
+		// 如果原请求有查询参数，附加上去
+		if r.URL.RawQuery != "" {
+			targetURL += "?" + r.URL.RawQuery
+		}
+
 		var body io.Reader
 		if method == http.MethodGet {
-			// POST → GET：将 Body 转为 query string 附在 URL 后
-			if r.Body != nil {
-				bodyBytes, _ := io.ReadAll(r.Body)
-				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // 重设 Body
-				queryStr := string(bodyBytes)
-				targetURL += "?" + url.QueryEscape(queryStr)
-			}
+			// GET 请求一般没有 Body，直接置空
 			body = nil
 		} else {
-			// GET → POST 或保持 POST
+			// 其他方法保持 Body
 			body = r.Body
 		}
 
