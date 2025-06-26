@@ -24,6 +24,7 @@ type RelayConfig struct {
 type Route struct {
 	ListenPath string `toml:"listen_path"`
 	BackendURL string `toml:"backend_url"`
+	MethodOverride string `toml:"method_override"`
 }
 
 // 总配置结构体

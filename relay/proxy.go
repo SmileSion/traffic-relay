@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
+
+	"traffic-relay/config"
 	"traffic-relay/logger"
 )
 
@@ -19,14 +22,14 @@ func dumpRequest(r *http.Request) string {
 	if r.Body != nil {
 		body, _ := io.ReadAll(r.Body)
 		fmt.Fprintf(&b, "\n%s\n", string(body))
-		// 重要：重设 Body，使后续请求可用
+		// 重置 Body，确保后续仍可读
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
 	}
 	return b.String()
 }
 
-// MakeProxyHandler 返回一个代理函数，将指定路径请求转发至 backendURL
-func MakeProxyHandler(backendURL string) http.HandlerFunc {
+// MakeProxyHandler 返回一个代理函数，将请求转发至 backendURL，并根据配置覆盖 method
+func MakeProxyHandler(route config.Route) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 处理 OPTIONS 预检请求
 		if r.Method == http.MethodOptions {
@@ -40,14 +43,39 @@ func MakeProxyHandler(backendURL string) http.HandlerFunc {
 		// 设置跨域响应头
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		// 日志记录：接收到的请求
+		// 日志记录：接收请求
 		logger.Logger.Printf("收到请求：\n%s", dumpRequest(r))
 
-		// 拼接目标 URL
-		targetURL := strings.TrimRight(backendURL, "/") + r.URL.Path
+		// 判断是否需要 method 重写
+		method := r.Method
+		if route.MethodOverride != "" && strings.ToUpper(route.MethodOverride) != r.Method {
+			logger.Logger.Printf("方法重写: %s => %s", r.Method, route.MethodOverride)
+			method = strings.ToUpper(route.MethodOverride)
+		}
 
-		// 构造新请求转发
-		req, err := http.NewRequest(r.Method, targetURL, r.Body)
+		// 目标 URL
+		targetURL := strings.TrimRight(route.BackendURL, "/") + r.URL.Path
+
+		// 处理请求体
+		var body io.Reader
+		var queryStr string
+
+		if method == http.MethodGet {
+			// POST → GET：将 Body 转为 query string 附在 URL 后
+			if r.Body != nil {
+				bodyBytes, _ := io.ReadAll(r.Body)
+				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // 重设
+				queryStr = string(bodyBytes)
+				targetURL += "?" + url.QueryEscape(queryStr)
+			}
+			body = nil
+		} else {
+			// GET → POST 或保持 POST
+			body = r.Body
+		}
+
+		// 构造转发请求
+		req, err := http.NewRequest(method, targetURL, body)
 		if err != nil {
 			http.Error(w, "构造请求失败", http.StatusInternalServerError)
 			logger.Logger.Printf("构造请求失败: %v", err)
@@ -55,10 +83,10 @@ func MakeProxyHandler(backendURL string) http.HandlerFunc {
 		}
 		req.Header = r.Header.Clone()
 
-		// 日志记录：转发的请求
+		// 日志：转发请求
 		logger.Logger.Printf("转发请求到：%s\n%s", targetURL, dumpRequest(req))
 
-		// 执行请求
+		// 执行转发
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			http.Error(w, "请求后端失败", http.StatusBadGateway)
@@ -67,7 +95,7 @@ func MakeProxyHandler(backendURL string) http.HandlerFunc {
 		}
 		defer resp.Body.Close()
 
-		// 拷贝响应头和内容
+		// 响应头和响应体
 		for k, v := range resp.Header {
 			w.Header()[k] = v
 		}

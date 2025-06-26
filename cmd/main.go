@@ -13,8 +13,8 @@ func main() {
 	logger.InitLogger()
 
 	for _, route := range config.Conf.Routes {
-		http.HandleFunc(route.ListenPath, relay.MakeProxyHandler(route.BackendURL))
-		log.Printf("注册代理: %s => %s", route.ListenPath, route.BackendURL)
+		http.HandleFunc(route.ListenPath, relay.MakeProxyHandler(route))
+		log.Printf("注册代理: %s => %s (method_override=%s)", route.ListenPath, route.BackendURL, route.MethodOverride)
 	}
 
 	log.Printf("启动代理服务器监听：%s", config.Conf.Relay.ListenAddr)
