@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"traffic-relay/config"
 	"traffic-relay/logger"
@@ -33,7 +34,11 @@ func dumpRequest(r *http.Request) string {
 var insecureHttpClient = &http.Client{
 	Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		MaxIdleConns:        100,//客户端维护的最大空闲（保持活动的）TCP 连接数
+        MaxIdleConnsPerHost: 100,//每个目标主机（host）允许保持的最大空闲连接数
+        IdleConnTimeout:     90 * time.Second,//空闲连接的超时时间，超过该时间未被使用的空闲连接会被关闭
 	},
+	Timeout: 30 * time.Second,
 }
 
 // RoundRobinBalancer 轮询负载均衡器
