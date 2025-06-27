@@ -16,5 +16,5 @@ func InitLogger() {
 		MaxBackups: config.Conf.Log.MaxBackups,
 		MaxAge:     config.Conf.Log.MaxAge,
 		Compress:   config.Conf.Log.Compress,
-	}, "[Track] ", log.LstdFlags)
+	}, "[Traffic-Relay] ", log.LstdFlags)
 }
