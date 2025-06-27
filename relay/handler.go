@@ -3,6 +3,7 @@ package relay
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -12,6 +13,7 @@ import (
 )
 
 func MakeProxyHandler(route config.Route) http.HandlerFunc {
+	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
 	targets := route.BackendURLs
 	if len(targets) == 0 && route.BackendURL != "" {
 		targets = []string{route.BackendURL}
@@ -27,7 +29,7 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		internal.HeaderCORS(w)
 
 		bodyBytes := internal.ReadAndRestoreBody(r)
-		logger.Logger.Printf("收到请求：\n%s", internal.DumpRequest(r, bodyBytes))
+		logger.Logger.Printf("[ID:%s] 收到请求：\n%s", requestID, internal.DumpRequest(r, bodyBytes))
 
 		method := internal.GetMethod(r, route.MethodOverride)
 		targetBackend := balancer.Next()
@@ -48,7 +50,7 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		}
 		req.Header = r.Header.Clone()
 
-		logger.Logger.Printf("转发请求到：%s\n%s", targetURL, internal.DumpRequest(req, bodyBytes))
+		logger.Logger.Printf("[ID:%s] 转发请求到：%s\n%s", requestID, targetURL, internal.DumpRequest(req, bodyBytes))
 
 		resp, err := insecureHttpClient.Do(req)
 		if err != nil {
@@ -57,10 +59,16 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 			return
 		}
 		defer resp.Body.Close()
-		logger.Logger.Printf("后端响应状态码: %d", resp.StatusCode)
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			http.Error(w, "读取后端响应失败", http.StatusInternalServerError)
+			logger.Logger.Printf("读取后端响应失败: %v", err)
+			return
+		}
+		logger.Logger.Printf("[ID:%s] 后端响应：\n%s", requestID, internal.DumpResponse(resp))
 
 		internal.CopyHeaders(w, resp.Header)
 		w.WriteHeader(resp.StatusCode)
-		_, _ = io.Copy(w, resp.Body)
+		_, _ = w.Write(respBody)
 	}
 }

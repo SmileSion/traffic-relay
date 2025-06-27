@@ -39,6 +39,19 @@ func DumpRequest(r *http.Request, body []byte) string {
 	return b.String()
 }
 
+func DumpResponse(resp *http.Response) string {
+	var b strings.Builder
+	b.WriteString("=== HTTP RESPONSE START ===\n")
+	fmt.Fprintf(&b, "Status Code: %d\n", resp.StatusCode)
+
+	b.WriteString("\n--- Headers ---\n")
+	for k, v := range resp.Header {
+		fmt.Fprintf(&b, "%s: %s\n", k, strings.Join(v, ","))
+	}
+	b.WriteString("=== HTTP RESPONSE END ===")
+	return b.String()
+}
+
 
 func GetMethod(r *http.Request, override string) string {
 	method := r.Method
