@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -14,15 +15,21 @@ import (
 	"traffic-relay/logger"
 )
 
+const maxLogSize = 1024
+
 // dumpRequest 打印请求（用于日志记录）
-func dumpRequest(r *http.Request,body []byte) string {
+func dumpRequest(r *http.Request, body []byte) string {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s %s %s\n", r.Method, r.URL.RequestURI(), r.Proto)
 	for k, v := range r.Header {
 		fmt.Fprintf(&b, "%s: %s\n", k, v)
 	}
-	if len(body) > 0 {
-		fmt.Fprintf(&b,"\n%s\n",string(body))
+
+	//截断日志，避免过长攻击
+	if len(body) > maxLogSize {
+		fmt.Fprintf(&b, "\n%s\n[Body已截断，原始长度 %d 字节]", string(body[:maxLogSize]), len(body))
+	} else {
+		fmt.Fprintf(&b, "\n%s\n", string(body))
 	}
 	return b.String()
 }
@@ -30,10 +37,10 @@ func dumpRequest(r *http.Request,body []byte) string {
 // insecureHttpClient 是跳过证书验证的客户端
 var insecureHttpClient = &http.Client{
 	Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		MaxIdleConns:        100,//客户端维护的最大空闲（保持活动的）TCP 连接数
-        MaxIdleConnsPerHost: 100,//每个目标主机（host）允许保持的最大空闲连接数
-        IdleConnTimeout:     90 * time.Second,//空闲连接的超时时间，超过该时间未被使用的空闲连接会被关闭
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+		MaxIdleConns:        100,              //客户端维护的最大空闲（保持活动的）TCP 连接数
+		MaxIdleConnsPerHost: 100,              //每个目标主机（host）允许保持的最大空闲连接数
+		IdleConnTimeout:     90 * time.Second, //空闲连接的超时时间，超过该时间未被使用的空闲连接会被关闭
 	},
 	Timeout: 30 * time.Second,
 }
@@ -86,7 +93,7 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		logger.Logger.Printf("收到请求：\n%s", dumpRequest(r,bodyBytes))
+		logger.Logger.Printf("收到请求：\n%s", dumpRequest(r, bodyBytes))
 
 		method := r.Method
 		if route.MethodOverride != "" && strings.ToUpper(route.MethodOverride) != r.Method {
@@ -112,7 +119,10 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 			body = bytes.NewReader(bodyBytes)
 		}
 
-		req, err := http.NewRequest(method, targetURL, body)
+		//精细超时控制
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, method, targetURL, body)
 		if err != nil {
 			http.Error(w, "构造请求失败", http.StatusInternalServerError)
 			logger.Logger.Printf("构造请求失败: %v", err)
@@ -120,7 +130,7 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		}
 		req.Header = r.Header.Clone()
 
-		logger.Logger.Printf("转发请求到：%s\n%s", targetURL, dumpRequest(req,bodyBytes))
+		logger.Logger.Printf("转发请求到：%s\n%s", targetURL, dumpRequest(req, bodyBytes))
 
 		resp, err := insecureHttpClient.Do(req)
 		if err != nil {
@@ -129,8 +139,14 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 			return
 		}
 		defer resp.Body.Close()
+		logger.Logger.Printf("后端响应状态码: %d", resp.StatusCode)
 
 		for k, v := range resp.Header {
+			//过滤响应字段，如需使用打开即可
+			// lowerK := strings.ToLower(k)
+			// if lowerK == "content-length" || lowerK == "transfer-encoding" || lowerK == "connection" {
+			// 	continue
+			// }
 			w.Header()[k] = v
 		}
 		w.WriteHeader(resp.StatusCode)

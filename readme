@@ -1,0 +1,49 @@
+# Traffic Relay
+
+一个用 Go 编写的高性能 HTTP 流量转发代理，支持多后端轮询负载均衡、方法重写、跨域预检、TLS 跳过验证等功能。
+
+## ✨ 特性
+
+- 🌐 支持 HTTP 代理流量转发
+- 🔁 多后端地址轮询（Round Robin）
+- 🔄 支持请求方法重写（如 POST → GET）
+- 🔧 自动处理跨域预检（OPTIONS 请求）
+- 🔐 支持跳过 TLS 证书验证
+- 📦 支持读取配置文件（TOML 格式）
+- 📑 完整请求日志打印，支持请求体复用
+
+---
+
+## 📁 使用方法
+
+将编译后的执行文件和config/config.toml文件存储在一个目录内，在该目录执行即可实现流量转发
+
+## 🔧 配置文件示例（`config.toml`）
+
+```toml
+[log]
+filepath = "log/relay.log"
+max_size = 10
+max_backups = 3
+max_age = 7
+compress = true
+
+[relay]
+listen_addr = "127.0.0.1:9100"
+
+[[routes]]
+listen_path = "/XXXXX"
+backend_urls = ["http://127.0.0.1:9013", "http://127.0.0.1:9014"]  # 多个后端地址，支持轮询
+method_override = "POST" #请求强制转POST，不填次参数即为原始方法
+
+[[routes]]
+
+
+```
+
+🛡️ 注意事项
+- 默认跳过 TLS 证书验证（InsecureSkipVerify = true），不建议用于生产环境。
+- 已实现基本的错误处理机制，如请求失败、构造失败、无后端等。
+
+✍️ By
+SmileSion
