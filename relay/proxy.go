@@ -15,17 +15,14 @@ import (
 )
 
 // dumpRequest 打印请求（用于日志记录）
-func dumpRequest(r *http.Request) string {
+func dumpRequest(r *http.Request,body []byte) string {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s %s %s\n", r.Method, r.URL.RequestURI(), r.Proto)
 	for k, v := range r.Header {
 		fmt.Fprintf(&b, "%s: %s\n", k, v)
 	}
-	if r.Body != nil {
-		body, _ := io.ReadAll(r.Body)
-		fmt.Fprintf(&b, "\n%s\n", string(body))
-		// 重置 Body，确保后续仍可读
-		r.Body = io.NopCloser(bytes.NewBuffer(body))
+	if len(body) > 0 {
+		fmt.Fprintf(&b,"\n%s\n",string(body))
 	}
 	return b.String()
 }
@@ -79,7 +76,17 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		logger.Logger.Printf("收到请求：\n%s", dumpRequest(r))
+		//读取、缓存请求体
+		var bodyBytes []byte
+		if r.Body != nil {
+			bodyBytes, _ = io.ReadAll(r.Body)
+			// 关闭旧的 Body，防止资源泄漏
+			r.Body.Close()
+			// 重新设置 Body，保证后续可以正常读取
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+
+		logger.Logger.Printf("收到请求：\n%s", dumpRequest(r,bodyBytes))
 
 		method := r.Method
 		if route.MethodOverride != "" && strings.ToUpper(route.MethodOverride) != r.Method {
@@ -102,7 +109,7 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		if method == http.MethodGet {
 			body = nil
 		} else {
-			body = r.Body
+			body = bytes.NewReader(bodyBytes)
 		}
 
 		req, err := http.NewRequest(method, targetURL, body)
@@ -113,7 +120,7 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		}
 		req.Header = r.Header.Clone()
 
-		logger.Logger.Printf("转发请求到：%s\n%s", targetURL, dumpRequest(req))
+		logger.Logger.Printf("转发请求到：%s\n%s", targetURL, dumpRequest(req,bodyBytes))
 
 		resp, err := insecureHttpClient.Do(req)
 		if err != nil {
