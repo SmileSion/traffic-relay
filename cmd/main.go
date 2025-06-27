@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 	"strings"
@@ -10,7 +11,10 @@ import (
 )
 
 func main() {
-	config.InitConfig()
+	configPath := flag.String("c", "config/config.toml", "配置文件路径")
+	flag.Parse()
+
+	config.InitConfig(*configPath)
 	logger.InitLogger()
 
 	for _, route := range config.Conf.Routes {

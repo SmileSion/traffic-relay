@@ -33,8 +33,9 @@ type Config struct {
 
 var Conf Config
 
-func InitConfig() {
-	if _, err := toml.DecodeFile("config/config.toml", &Conf); err != nil {
+// InitConfig 使用指定路径加载配置文件
+func InitConfig(path string) {
+	if _, err := toml.DecodeFile(path, &Conf); err != nil {
 		panic(err)
 	}
 	log.Printf("配置文件加载成功，监听地址：%s", Conf.Relay.ListenAddr)
