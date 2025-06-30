@@ -29,7 +29,7 @@ max_backups = 3
 max_age = 7
 compress = true
 enable_console = false  #是否控制台输出
-level = "debug" #日志级别 debug、trace、info、warn、error
+level = "debug" #日志级别 debug、info、warn、error
 
 [relay]
 listen_addr = "127.0.0.1:9100"
