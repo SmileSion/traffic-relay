@@ -14,14 +14,13 @@ import (
 )
 
 func MakeProxyHandler(route config.Route) http.HandlerFunc {
+	targets := route.BackendURLs
+	if len(targets) == 0 && route.BackendURL != "" {
+		targets = []string{route.BackendURL}
+	}
+	balancer := NewRoundRobinBalancer(targets)
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestID := fmt.Sprintf("%d", time.Now().UnixNano())
-
-		targets := route.BackendURLs
-		if len(targets) == 0 && route.BackendURL != "" {
-			targets = []string{route.BackendURL}
-		}
-		balancer := NewRoundRobinBalancer(targets)
 
 		if r.Method == http.MethodOptions {
 			internal.HeaderCORS(w)

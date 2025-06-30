@@ -8,6 +8,9 @@ type RoundRobinBalancer struct {
 }
 
 func NewRoundRobinBalancer(targets []string) *RoundRobinBalancer {
+	if targets == nil {
+		targets = []string{}
+	}
 	return &RoundRobinBalancer{targets: targets}
 }
 
@@ -15,6 +18,14 @@ func (rr *RoundRobinBalancer) Next() string {
 	if len(rr.targets) == 0 {
 		return ""
 	}
-	idx := atomic.AddUint64(&rr.counter, 1)
-	return rr.targets[int(idx-1)%len(rr.targets)]
+	for {
+		current := atomic.LoadUint64(&rr.counter)
+		next := current + 1
+		if next == ^uint64(0) { // 到达最大值，重置为0
+			next = 0
+		}
+		if atomic.CompareAndSwapUint64(&rr.counter, current, next) {
+			return rr.targets[int(current)%len(rr.targets)]
+		}
+	}
 }
