@@ -7,17 +7,19 @@ import (
 )
 
 type LogConfig struct {
-	Filepath   string `toml:"filepath"`
-	MaxSize    int    `toml:"max_size"`
-	MaxBackups int    `toml:"max_backups"`
-	MaxAge     int    `toml:"max_age"`
-	Compress   bool   `toml:"compress"`
+	Filepath      string `toml:"filepath"`
+	MaxSize       int    `toml:"max_size"`
+	MaxBackups    int    `toml:"max_backups"`
+	MaxAge        int    `toml:"max_age"`
+	Level         string `toml:"level"`
+	Compress      bool   `toml:"compress"`
+	EnableConsole bool   `toml:"enable_console"`
 }
 
 type Route struct {
 	ListenPath     string   `toml:"listen_path"`
-	BackendURL     string   `toml:"backend_url"`      // 兼容旧单地址配置
-	BackendURLs    []string `toml:"backend_urls"`     // 新支持多个地址
+	BackendURL     string   `toml:"backend_url"`  // 兼容旧单地址配置
+	BackendURLs    []string `toml:"backend_urls"` // 新支持多个地址
 	MethodOverride string   `toml:"method_override"`
 }
 
