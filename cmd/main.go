@@ -11,6 +11,7 @@ import (
 	"traffic-relay/config"
 	"traffic-relay/logger"
 	"traffic-relay/relay"
+	"traffic-relay/utils"
 )
 
 func main() {
@@ -19,6 +20,7 @@ func main() {
 
 	config.InitConfig(*configPath)
 	logger.InitLogger()
+	utils.StartQPSMonitor()
 
 	for _, route := range config.Conf.Routes {
 		http.HandleFunc(route.ListenPath, relay.MakeProxyHandler(route))

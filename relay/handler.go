@@ -11,6 +11,7 @@ import (
 	"traffic-relay/config"
 	"traffic-relay/logger"
 	"traffic-relay/relay/internal"
+	"traffic-relay/utils"
 )
 
 func MakeProxyHandler(route config.Route) http.HandlerFunc {
@@ -20,6 +21,7 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 	}
 	balancer := NewRoundRobinBalancer(targets)
 	return func(w http.ResponseWriter, r *http.Request) {
+		utils.Inc()
 		requestID := fmt.Sprintf("%d", time.Now().UnixNano())
 
 		if r.Method == http.MethodOptions {
