@@ -1,9 +1,9 @@
 package utils
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
+	"traffic-relay/logger"
 )
 
 var counter int64
@@ -20,7 +20,9 @@ func StartQPSMonitor() {
 		defer ticker.Stop()
 		for range ticker.C {
 			c := atomic.SwapInt64(&counter, 0)
-			fmt.Printf("[QPS] 当前每秒请求数：%d\n", c)
+			if c >= 100 {
+				logger.Logger.Infof("[QPS] 当前并发高，每秒请求数：%d\n", c)
+			}
 		}
 	}()
 }
