@@ -21,6 +21,7 @@ type Route struct {
 	BackendURL     string   `toml:"backend_url"`  // 兼容旧单地址配置
 	BackendURLs    []string `toml:"backend_urls"` // 新支持多个地址
 	MethodOverride string   `toml:"method_override"`
+	RewritePath    string   `toml:"rewrite_path"`
 }
 
 type RelayConfig struct {

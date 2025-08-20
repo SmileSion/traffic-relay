@@ -43,6 +43,11 @@ func MakeProxyHandler(route config.Route) http.HandlerFunc {
 		}
 		targetURL := internal.BuildTargetURL(targetBackend, r)
 
+		// 如果配置了 RewritePath，就替换请求路径
+		if route.RewritePath != "" {
+			targetURL = targetBackend + route.RewritePath
+		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 		defer cancel()
 
